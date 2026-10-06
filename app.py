@@ -4,6 +4,10 @@ import re
 import random
 import zipfile
 import io
+from PIL import Image
+
+# --- CẤU HÌNH TRANG STREAMLIT ---
+st.set_page_config(page_title="Hệ Thống Công Cụ Giáo Viên Online", page_icon="📝", layout="centered")
 
 # --- 1. CÁC HÀM XỬ LÝ TRỘN ĐỀ LATEX ---
 def parse_choices(choice_body):
@@ -90,81 +94,88 @@ def mix_latex_file(content, seed_val):
             
     return "".join(new_tokens)
 
-# --- 2. GIAO DIỆN WEB STREAMLIT ---
-st.set_page_config(page_title="Công cụ Trộn Đề LaTeX Online", page_icon="📝", layout="centered")
-
-st.title("📝 HỆ THỐNG TRỘN ĐỀ LATEX ONLINE")
-st.write("Tải lên các file đề gốc `.tex` để tạo ra các mã đề trộn ngẫu nhiên kèm cấu trúc chuẩn.")
-
-# Thanh công cụ bên trái (Sidebar)
-st.sidebar.header("Cấu hình trộn đề")
-num_versions = st.sidebar.number_input("Số lượng mã đề cần tạo:", min_value=1, max_value=8, value=4, step=1)
-start_code = st.sidebar.number_input("Mã đề bắt đầu:", min_value=100, max_value=999, value=101, step=1)
-
-# Tải file lên
-uploaded_files = st.file_uploader("Chọn một hoặc nhiều file LaTeX (.tex)", type=["tex"], accept_multiple_files=True)
-
-if uploaded_files:
-    if st.button("🚀 Bắt đầu Trộn Đề", type="primary"):
-        # Tạo file ZIP trong bộ nhớ đệm
-        zip_buffer = io.BytesIO()
-        
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for uploaded_file in uploaded_files:
-                filename = uploaded_file.name
-                base_name = os.path.splitext(filename)[0]
-                content = uploaded_file.read().decode("utf-8")
-                
-                for i in range(num_versions):
-                    code = start_code + i
-                    mixed_content = mix_latex_file(content, seed_val=code + hash(filename))
-                    
-                    header_notice = f"% ==========================================\n% MÃ ĐỀ: {code}\n% ==========================================\n\n"
-                    final_content = header_notice + mixed_content
-                    
-                    out_filename = f"{base_name}_MaDe_{code}.tex"
-                    zip_file.writestr(out_filename, final_content)
-
-        zip_buffer.seek(0)
-        st.success(f"✅ Đã trộn thành công {len(uploaded_files)} file sang {num_versions} mã đề!")
-        
-        # Nút tải file ZIP
-        st.download_button(
-            label="📦 Tải về tất cả mã đề (.ZIP)",
-            data=zip_buffer,
-            file_name="De_Thi_Da_Tron.zip",
-            mime="application/zip"
-        )
-import streamlit as st
-from PIL import Image
-import io
-
-# Tạo 2 tab giao diện
+# --- 2. GIAO DIỆN TABS STREAMLIT ---
 tab1, tab2 = st.tabs(["🚀 Trộn Đề LaTeX", "🖼️ Chuyển Ảnh sang PDF"])
 
+# ================= TAB 1: TRỘN ĐỀ LATEX =================
 with tab1:
-    # --- TOÀN BỘ CODE TRỘN ĐỀ LATEX HIỆN TẠI CỦA BẠN NẰM Ở ĐÂY ---
-    pass
+    st.title("📝 HỆ THỐNG TRỘN ĐỀ LATEX ONLINE")
+    st.write("Tải lên các file đề gốc `.tex` để tạo ra các mã đề trộn ngẫu nhiên kèm cấu trúc chuẩn.")
 
+    # Thanh cấu hình Sidebar
+    st.sidebar.header("Cấu hình trộn đề")
+    num_versions = st.sidebar.number_input("Số lượng mã đề cần tạo:", min_value=1, max_value=8, value=4, step=1)
+    start_code = st.sidebar.number_input("Mã đề bắt đầu:", min_value=100, max_value=999, value=101, step=1)
+
+    # Tải file .tex lên
+    uploaded_tex_files = st.file_uploader(
+        "Chọn một hoặc nhiều file LaTeX (.tex)", 
+        type=["tex"], 
+        accept_multiple_files=True,
+        key="tex_uploader"
+    )
+
+    if uploaded_tex_files:
+        if st.button("🚀 Bắt đầu Trộn Đề", type="primary"):
+            zip_buffer = io.BytesIO()
+            
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for uploaded_file in uploaded_tex_files:
+                    filename = uploaded_file.name
+                    base_name = os.path.splitext(filename)[0]
+                    content = uploaded_file.read().decode("utf-8")
+                    
+                    for i in range(num_versions):
+                        code = start_code + i
+                        mixed_content = mix_latex_file(content, seed_val=code + hash(filename))
+                        
+                        header_notice = f"% ==========================================\n% MÃ ĐỀ: {code}\n% ==========================================\n\n"
+                        final_content = header_notice + mixed_content
+                        
+                        out_filename = f"{base_name}_MaDe_{code}.tex"
+                        zip_file.writestr(out_filename, final_content)
+
+            zip_buffer.seek(0)
+            st.success(f"✅ Đã trộn thành công {len(uploaded_tex_files)} file sang {num_versions} mã đề!")
+            
+            # Nút tải file ZIP
+            st.download_button(
+                label="📦 Tải về tất cả mã đề (.ZIP)",
+                data=zip_buffer,
+                file_name="De_Thi_Da_Tron.zip",
+                mime="application/zip"
+            )
+
+# ================= TAB 2: CHUYỂN ÁNH SANG PDF =================
 with tab2:
-    st.header("Chuyển Đổi Hình Ảnh Thành File PDF")
-    uploaded_files = st.file_uploader(
+    st.title("🖼️ CHUYỂN ĐỔI HÌNH ẢNH THÀNH FILE PDF")
+    st.write("Tải lên các file ảnh (PNG, JPG, JPEG) để gộp thành 1 file PDF duy nhất.")
+    
+    uploaded_img_files = st.file_uploader(
         "Chọn các file ảnh:",
         type=["png", "jpg", "jpeg"],
-        accept_multiple_files=True
+        accept_multiple_files=True,
+        key="img_uploader"
     )
     
-    if uploaded_files:
-        uploaded_files.sort(key=lambda x: x.name)
-        if st.button("🚀 Chuyển đổi sang PDF"):
-            images = [Image.open(f).convert("RGB") for f in uploaded_files]
-            if images:
-                pdf_bytes = io.BytesIO()
-                images[0].save(pdf_bytes, format="PDF", save_all=True, append_images=images[1:])
-                
-                st.download_button(
-                    label="📥 Tải file PDF về",
-                    data=pdf_bytes.getvalue(),
-                    file_name="output.pdf",
-                    mime="application/pdf"
-                )
+    if uploaded_img_files:
+        # Sắp xếp ảnh theo tên file
+        uploaded_img_files.sort(key=lambda x: x.name)
+        st.info(f"Đã chọn **{len(uploaded_img_files)}** file ảnh.")
+        
+        if st.button("🚀 Chuyển đổi sang PDF", type="primary"):
+            try:
+                images = [Image.open(f).convert("RGB") for f in uploaded_img_files]
+                if images:
+                    pdf_bytes = io.BytesIO()
+                    images[0].save(pdf_bytes, format="PDF", save_all=True, append_images=images[1:])
+                    
+                    st.success("🎉 Chuyển đổi thành công!")
+                    st.download_button(
+                        label="📥 Tải file PDF về máy",
+                        data=pdf_bytes.getvalue(),
+                        file_name="output_images.pdf",
+                        mime="application/pdf"
+                    )
+            except Exception as e:
+                st.error(f"Có lỗi xảy ra: {e}")
