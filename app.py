@@ -135,3 +135,36 @@ if uploaded_files:
             file_name="De_Thi_Da_Tron.zip",
             mime="application/zip"
         )
+import streamlit as st
+from PIL import Image
+import io
+
+# Tạo 2 tab giao diện
+tab1, tab2 = st.tabs(["🚀 Trộn Đề LaTeX", "🖼️ Chuyển Ảnh sang PDF"])
+
+with tab1:
+    # --- TOÀN BỘ CODE TRỘN ĐỀ LATEX HIỆN TẠI CỦA BẠN NẰM Ở ĐÂY ---
+    pass
+
+with tab2:
+    st.header("Chuyển Đổi Hình Ảnh Thành File PDF")
+    uploaded_files = st.file_uploader(
+        "Chọn các file ảnh:",
+        type=["png", "jpg", "jpeg"],
+        accept_multiple_files=True
+    )
+    
+    if uploaded_files:
+        uploaded_files.sort(key=lambda x: x.name)
+        if st.button("🚀 Chuyển đổi sang PDF"):
+            images = [Image.open(f).convert("RGB") for f in uploaded_files]
+            if images:
+                pdf_bytes = io.BytesIO()
+                images[0].save(pdf_bytes, format="PDF", save_all=True, append_images=images[1:])
+                
+                st.download_button(
+                    label="📥 Tải file PDF về",
+                    data=pdf_bytes.getvalue(),
+                    file_name="output.pdf",
+                    mime="application/pdf"
+                )
