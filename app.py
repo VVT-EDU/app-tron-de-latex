@@ -12,6 +12,14 @@ import traceback
 from datetime import datetime
 from PIL import Image
 
+# Tự động cài đặt sympy nếu môi trường server chưa có
+try:
+    import sympy
+except ImportError:
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "sympy"])
+    import sympy
+
 # ==============================================================================
 # 1. KHỞI TẠO ĐƯỜNG DẪN HỆ THỐNG & TỰ ĐỘNG GIẢI NÉN FILE ZIP CÓ SẴN TRÊN REPO
 # ==============================================================================
@@ -147,7 +155,7 @@ with tab2:
             st.error(f"Có lỗi khi chuyển đổi ảnh: {e}")
 
 # ------------------------------------------------------------------------------
-# TAB 3: HỆ THỐNG TẠO ĐỀ TỰ ĐỘNG (NÂNG CẤP KIỂM TRA ĐỦ/THIẾU/DƯ CÂU HỎI)
+# TAB 3: HỆ THỐNG TẠO ĐỀ TỰ ĐỘNG
 # ------------------------------------------------------------------------------
 with tab3:
     st.title("📝 HỆ THỐNG TẠO ĐỀ THI TỰ ĐỘNG")
@@ -222,7 +230,7 @@ with tab3:
                     })
 
         # ----------------------------------------------------------------------
-        # MỚI: BẢNG NHẬP CHỈ TIÊU SỐ CÂU CHO TỪNG ĐỀ (ATN, BTF, CDK, Khác)
+        # 1. BẢNG NHẬP CHỈ TIÊU SỐ CÂU CHO TỪNG ĐỀ (ATN, BTF, CDK, Khác)
         # ----------------------------------------------------------------------
         st.markdown("---")
         st.subheader("🎯 1. Cấu hình Chỉ tiêu số câu hỏi cho từng Đề")
@@ -247,7 +255,7 @@ with tab3:
                 }
 
         # ----------------------------------------------------------------------
-        # BẢNG CHỌN CÂU HỎI TỪ DANH SÁCH FILE
+        # 2. BẢNG CHỌN CÂU HỎI TỪ DANH SÁCH FILE
         # ----------------------------------------------------------------------
         st.markdown("---")
         st.subheader("📌 2. Chọn câu hỏi từ các file bài tập")
@@ -299,7 +307,9 @@ with tab3:
             for path_check in [os.path.join(BASE_DIR, "tieude", f"title_{j}.tex"), os.path.join(BASE_DIR, "tieudechinh", f"title_{j}.tex")]:
                 if os.path.exists(path_check):
                     with open(path_check, "r", encoding="utf-8", errors="ignore") as f:
-                        td_defaults[j] = f.read().strip()
+                        raw_td = f.read().strip()
+                        raw_td = raw_td.replace(r"\Closesolutionfile{ans}", "")
+                        td_defaults[j] = raw_td.strip()
                     break
 
         st.markdown("---")
@@ -318,6 +328,11 @@ with tab3:
                     ma_de = f"{de_idx}{random.randint(11, 99)}"
                     final_content = ""
                     counts = {"ATN": 0, "BTF": 0, "CDK": 0}
+
+                    # Tạo sẵn thư mục 'ans' cùng cấp với 'khaibao' bằng các file rỗng
+                    zip_file.writestr(f"{folder_de}/ans/atn_D{de_idx}.tex", "% File dap an ATN\n")
+                    zip_file.writestr(f"{folder_de}/ans/btf_D{de_idx}.tex", "% File dap an BTF\n")
+                    zip_file.writestr(f"{folder_de}/ans/cdk_D{de_idx}.tex", "% File dap an CDK\n")
 
                     for dtype in ["ATN", "BTF", "CDK", "Khác"]:
                         sec_txt = ""
@@ -351,12 +366,14 @@ with tab3:
                                     header_title = re.sub(r"\[ans/.*?\]", f"[ans/{dtype.lower()}_D{de_idx}]", header_title)
                                 else:
                                     header_title = f"\\Opensolutionfile{{ans}}[ans/{dtype.lower()}_D{de_idx}]"
-                                final_content += f"\n{header_title}\n{sec_txt}\\Closesolutionfile{{ans}}\n"
+                                final_content += f"\n{header_title}\n{sec_txt}\n\\Closesolutionfile{{ans}}\n"
                             else:
                                 final_content += f"\n{header_title}\n{sec_txt}\n"
 
+                    # Ghi nội dung đề thi vào data/content.tex
                     zip_file.writestr(f"{folder_de}/data/content.tex", final_content)
 
+                    # File Main_De.tex
                     main_tex = f"""\\documentclass[11pt,a4paper]{{extbook}}
 \\input{{khaibao/khaibao-main}}
 \\input{{khaibao/Khaibao_Standard}}
@@ -372,6 +389,7 @@ with tab3:
 \\end{{document}}"""
                     zip_file.writestr(f"{folder_de}/Main_De{de_idx}_{time_str}.tex", main_tex)
 
+                    # File Main_DA.tex (Đáp án)
                     da_tex = f"""\\documentclass[11pt,a4paper]{{extbook}}
 \\input{{khaibao/khaibao-main}}
 \\input{{khaibao/Khaibao_Standard}}
@@ -387,6 +405,7 @@ with tab3:
 \\end{{document}}"""
                     zip_file.writestr(f"{folder_de}/Main_DA_De{de_idx}_{time_str}.tex", da_tex)
 
+                    # Đóng gói thư mục khai bao và hotro vào từng mã đề
                     add_folder_to_zip(zip_file, "khaibao", f"{folder_de}/khaibao")
                     add_folder_to_zip(zip_file, "hotro", f"{folder_de}")
 
@@ -404,13 +423,11 @@ with tab3:
             warnings = []
 
             for de_idx in range(1, so_de + 1):
-                # Tính tổng số câu đã chọn cho đề này theo từng loại
                 actual = {"ATN": 0, "BTF": 0, "CDK": 0, "Khác": 0}
                 for item in q_data_list:
                     c = selected_counts[de_idx].get(item['path'], 0)
                     actual[item['type']] += c
 
-                # So sánh với chỉ tiêu
                 for dtype in ["ATN", "BTF", "CDK", "Khác"]:
                     target = target_counts[de_idx][dtype]
                     act = actual[dtype]
@@ -420,7 +437,6 @@ with tab3:
                     elif act > target:
                         warnings.append(f"⚠️ **Đề {de_idx} - Loại {dtype}:** Chỉ tiêu **{target}** câu nhưng bạn đã chọn **{act}** câu (Dư **{act - target}** câu).")
 
-            # Hiển thị kết quả kiểm tra
             if errors or warnings:
                 st.subheader("⚠️ CẢNH BÁO SỐ LƯỢNG CÂU HỎI")
                 
