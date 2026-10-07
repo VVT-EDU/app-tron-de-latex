@@ -19,7 +19,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-# Danh sách các file ZIP cần tự động giải nén khi ứng dụng khởi chạy
 AUTO_UNZIP_FILES = ["topics.zip", "khaibao.zip", "hotro.zip", "tieude.zip"]
 
 for zip_filename in AUTO_UNZIP_FILES:
@@ -27,7 +26,6 @@ for zip_filename in AUTO_UNZIP_FILES:
     folder_name = zip_filename.replace(".zip", "")
     target_dir = os.path.join(BASE_DIR, folder_name)
     
-    # Giải nén tự động nếu phát hiện file ZIP và chưa có thư mục tương ứng
     if os.path.exists(zip_path) and not os.path.exists(target_dir):
         try:
             with zipfile.ZipFile(zip_path, 'r') as zref:
@@ -35,7 +33,6 @@ for zip_filename in AUTO_UNZIP_FILES:
         except Exception as e:
             st.error(f"Lỗi khi giải nén {zip_filename}: {e}")
 
-# Tự động nạp tất cả thư mục con trong topics vào sys.path để hỗ trợ import chéo module Python
 TOPICS_DIR = os.path.join(BASE_DIR, "topics")
 if os.path.exists(TOPICS_DIR):
     if TOPICS_DIR not in sys.path:
@@ -57,7 +54,6 @@ st.set_page_config(page_title="Hệ Thống Trộn Đề & Tạo Đề LaTeX Pro
 ex_pattern = re.compile(r'\\begin{ex}.*?\\end{ex}', re.DOTALL)
 
 def extract_from_tex_file(file_path):
-    """Trích xuất danh sách các câu hỏi \begin{ex}...\end{ex} từ file .tex"""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -67,7 +63,6 @@ def extract_from_tex_file(file_path):
     return ex_pattern.findall(content)
 
 def generate_from_py_file(file_path):
-    """Import động module Python sinh đề và gọi hàm generate()"""
     try:
         file_dir = os.path.dirname(file_path)
         if file_dir not in sys.path:
@@ -88,7 +83,6 @@ def generate_from_py_file(file_path):
         return f"% Lỗi Python tại {os.path.basename(file_path)}:\n% {traceback.format_exc()}"
 
 def add_folder_to_zip(zip_file, folder_name, dest_prefix):
-    """Thêm toàn bộ tài nguyên cấu trúc (khaibao, hotro) vào file ZIP xuất ra"""
     full_folder_path = os.path.join(BASE_DIR, folder_name)
     if os.path.exists(full_folder_path):
         for root, _, files in os.walk(full_folder_path):
@@ -153,7 +147,7 @@ with tab2:
             st.error(f"Có lỗi khi chuyển đổi ảnh: {e}")
 
 # ------------------------------------------------------------------------------
-# TAB 3: HỆ THỐNG TẠO ĐỀ TỰ ĐỘNG TỪ NGUỒN CẤU TRÚC ĐA MỤC/FILE
+# TAB 3: HỆ THỐNG TẠO ĐỀ TỰ ĐỘNG (NÂNG CẤP KIỂM TRA ĐỦ/THIẾU/DƯ CÂU HỎI)
 # ------------------------------------------------------------------------------
 with tab3:
     st.title("📝 HỆ THỐNG TẠO ĐỀ THI TỰ ĐỘNG")
@@ -201,7 +195,6 @@ with tab3:
             scan_dir = temp_dir
 
     if scan_dir:
-        # Nạp tất cả thư mục quét vào hệ thống sys.path
         if scan_dir not in sys.path:
             sys.path.insert(0, scan_dir)
         for root, dirs, _ in os.walk(scan_dir):
@@ -228,24 +221,77 @@ with tab3:
                         "ext": ext
                     })
 
-        st.subheader("📌 Chọn số lượng câu hỏi sinh ra cho từng đề")
-        selected_counts = {}
+        # ----------------------------------------------------------------------
+        # MỚI: BẢNG NHẬP CHỈ TIÊU SỐ CÂU CHO TỪNG ĐỀ (ATN, BTF, CDK, Khác)
+        # ----------------------------------------------------------------------
+        st.markdown("---")
+        st.subheader("🎯 1. Cấu hình Chỉ tiêu số câu hỏi cho từng Đề")
+        st.info("Nhập số lượng câu hỏi mục tiêu bạn muốn tạo cho từng đề:")
+        
+        target_counts = {de_idx: {} for de_idx in range(1, so_de + 1)}
+        
+        cols_de = st.columns(min(so_de, 4))
+        for de_idx in range(1, so_de + 1):
+            with cols_de[(de_idx - 1) % 4]:
+                st.markdown(f"##### 📋 **Cấu hình Đề {de_idx}**")
+                n_atn = st.number_input(f"Số câu Trắc nghiệm (ATN):", min_value=0, value=12, key=f"target_atn_d{de_idx}")
+                m_btf = st.number_input(f"Số câu Đúng Sai (BTF):", min_value=0, value=4, key=f"target_btf_d{de_idx}")
+                k_cdk = st.number_input(f"Số câu Trả lời ngắn (CDK):", min_value=0, value=6, key=f"target_cdk_d{de_idx}")
+                h_khac = st.number_input(f"Số câu Khác:", min_value=0, value=0, key=f"target_khac_d{de_idx}")
+                
+                target_counts[de_idx] = {
+                    "ATN": n_atn,
+                    "BTF": m_btf,
+                    "CDK": k_cdk,
+                    "Khác": h_khac
+                }
+
+        # ----------------------------------------------------------------------
+        # BẢNG CHỌN CÂU HỎI TỪ DANH SÁCH FILE
+        # ----------------------------------------------------------------------
+        st.markdown("---")
+        st.subheader("📌 2. Chọn câu hỏi từ các file bài tập")
+        st.caption("Mặc định mỗi câu khi tích chọn sẽ có số lượng là 1.")
+
+        selected_counts = {de_idx: {} for de_idx in range(1, so_de + 1)}
         sub_tabs = st.tabs(["Trắc nghiệm (ATN)", "Đúng Sai (BTF)", "Trả lời ngắn (CDK)", "Khác"])
 
         for i, dtype in enumerate(["ATN", "BTF", "CDK", "Khác"]):
             with sub_tabs[i]:
                 items = [x for x in q_data_list if x['type'] == dtype]
+                
                 if not items:
                     st.info(f"Không tìm thấy file nào thuộc loại {dtype}")
-                for item in items:
-                    if item["ext"] == "PY":
-                        st.write(f"🐍 **{item['display']}** *(Script sinh câu hỏi ngẫu nhiên)*")
-                        cnt = st.number_input(f"Số câu sinh ra từ {item['display']}:", min_value=0, max_value=50, value=1, key=f"spin_{item['path']}")
-                    else:
-                        blks = extract_from_tex_file(item['path'])
-                        st.write(f"📄 **{item['display']}** *(File tĩnh - Có {len(blks)} câu)*")
-                        cnt = st.number_input(f"Số câu lấy từ {item['display']}:", min_value=0, max_value=max(1, len(blks)), value=min(2, len(blks)), key=f"spin_{item['path']}")
-                    selected_counts[item['path']] = cnt
+                else:
+                    search_kw = st.text_input(f"🔍 Tìm kiếm file trong tab {dtype}:", "", key=f"search_{dtype}")
+                    filtered_items = [x for x in items if search_kw.lower() in x['display'].lower()]
+                    st.caption(f"Hiển thị {len(filtered_items)}/{len(items)} file")
+
+                    for item in filtered_items:
+                        if item["ext"] == "PY":
+                            max_c = 50
+                            label_type = "🐍 Script Python"
+                        else:
+                            blks = extract_from_tex_file(item['path'])
+                            max_c = max(1, len(blks))
+                            label_type = f"📄 TeX tĩnh ({len(blks)} câu)"
+
+                        with st.expander(f"📌 **{item['display']}** *({label_type})*"):
+                            use_this = st.checkbox(f"Sử dụng file này cho các đề", value=False, key=f"use_{item['path']}")
+                            
+                            if use_this:
+                                cols = st.columns(min(so_de, 4))
+                                for de_idx in range(1, so_de + 1):
+                                    col_target = cols[(de_idx - 1) % 4]
+                                    with col_target:
+                                        cnt = st.number_input(
+                                            f"Đề {de_idx}:", 
+                                            min_value=0, 
+                                            max_value=max_c, 
+                                            value=1,
+                                            key=f"spin_d{de_idx}_{item['path']}"
+                                        )
+                                        selected_counts[de_idx][item['path']] = cnt
 
         # Đọc tiêu đề các phần câu hỏi
         td_defaults = {1: "", 2: "", 3: "", 4: ""}
@@ -256,8 +302,12 @@ with tab3:
                         td_defaults[j] = f.read().strip()
                     break
 
-        # Nút bấm xuất Project Đề Thi
-        if st.button("🚀 BẮT ĐẦU XUẤT PROJECT ĐỀ THI (.ZIP)", type="primary", key="btn_export_project"):
+        st.markdown("---")
+
+        # ----------------------------------------------------------------------
+        # HÀM XUẤT PROJECT ĐỀ THI
+        # ----------------------------------------------------------------------
+        def run_export():
             now = datetime.now()
             time_str = now.strftime("%d-%m-%Y_%Hh%Mm%Ss")
             zip_buffer = io.BytesIO()
@@ -274,7 +324,7 @@ with tab3:
                         items = [x for x in q_data_list if x['type'] == dtype]
 
                         for item in items:
-                            n = selected_counts.get(item['path'], 0)
+                            n = selected_counts[de_idx].get(item['path'], 0)
                             if n <= 0:
                                 continue
 
@@ -305,10 +355,8 @@ with tab3:
                             else:
                                 final_content += f"\n{header_title}\n{sec_txt}\n"
 
-                    # Ghi nội dung đề vào folder_de/data/content.tex
                     zip_file.writestr(f"{folder_de}/data/content.tex", final_content)
 
-                    # File Main_De.tex
                     main_tex = f"""\\documentclass[11pt,a4paper]{{extbook}}
 \\input{{khaibao/khaibao-main}}
 \\input{{khaibao/Khaibao_Standard}}
@@ -324,7 +372,6 @@ with tab3:
 \\end{{document}}"""
                     zip_file.writestr(f"{folder_de}/Main_De{de_idx}_{time_str}.tex", main_tex)
 
-                    # File Main_DA.tex (Đáp án)
                     da_tex = f"""\\documentclass[11pt,a4paper]{{extbook}}
 \\input{{khaibao/khaibao-main}}
 \\input{{khaibao/Khaibao_Standard}}
@@ -340,7 +387,6 @@ with tab3:
 \\end{{document}}"""
                     zip_file.writestr(f"{folder_de}/Main_DA_De{de_idx}_{time_str}.tex", da_tex)
 
-                    # Nén bổ sung folder khai bao và hotro vào từng mã đề
                     add_folder_to_zip(zip_file, "khaibao", f"{folder_de}/khaibao")
                     add_folder_to_zip(zip_file, "hotro", f"{folder_de}")
 
@@ -349,3 +395,43 @@ with tab3:
 
             st.success("🎉 Đã khởi tạo thành công Project Đề thi!")
             st.download_button("📦 Tải về bộ Project Đề Thi (.ZIP)", zip_buffer.getvalue(), f"Project_DeThi_{time_str}.zip", "application/zip")
+
+        # ----------------------------------------------------------------------
+        # KIỂM TRA ĐỦ / THIẾU / DƯ CÂU HỎI KHI BẤM NÚT XUẤT ĐỀ
+        # ----------------------------------------------------------------------
+        if st.button("🚀 BẮT ĐẦU XUẤT PROJECT ĐỀ THI (.ZIP)", type="primary", key="btn_export_project"):
+            errors = []
+            warnings = []
+
+            for de_idx in range(1, so_de + 1):
+                # Tính tổng số câu đã chọn cho đề này theo từng loại
+                actual = {"ATN": 0, "BTF": 0, "CDK": 0, "Khác": 0}
+                for item in q_data_list:
+                    c = selected_counts[de_idx].get(item['path'], 0)
+                    actual[item['type']] += c
+
+                # So sánh với chỉ tiêu
+                for dtype in ["ATN", "BTF", "CDK", "Khác"]:
+                    target = target_counts[de_idx][dtype]
+                    act = actual[dtype]
+                    
+                    if act < target:
+                        errors.append(f"❌ **Đề {de_idx} - Loại {dtype}:** Chỉ tiêu **{target}** câu nhưng bạn chỉ mới chọn **{act}** câu (Thiếu **{target - act}** câu).")
+                    elif act > target:
+                        warnings.append(f"⚠️ **Đề {de_idx} - Loại {dtype}:** Chỉ tiêu **{target}** câu nhưng bạn đã chọn **{act}** câu (Dư **{act - target}** câu).")
+
+            # Hiển thị kết quả kiểm tra
+            if errors or warnings:
+                st.subheader("⚠️ CẢNH BÁO SỐ LƯỢNG CÂU HỎI")
+                
+                for err in errors:
+                    st.error(err)
+                for warn in warnings:
+                    st.warning(warn)
+
+                st.info("💡 Bạn có thể quay lại điều chỉnh chỉ tiêu hoặc chọn thêm/bớt câu hỏi bên trên, hoặc bấm nút dưới đây để bỏ qua cảnh báo và tạo đề ngay.")
+                
+                if st.button("⚠️ Bỏ qua cảnh báo & Vẫn tiếp tục xuất đề", key="btn_force_export"):
+                    run_export()
+            else:
+                run_export()
