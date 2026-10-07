@@ -9,19 +9,18 @@ import shutil
 import importlib.util
 import tempfile
 import traceback
+import subprocess
 from datetime import datetime
 from PIL import Image
 
-# Tự động cài đặt sympy nếu môi trường server chưa có
+# Import sympy an toàn (khai báo trong requirements.txt)
 try:
     import sympy
 except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "sympy"])
-    import sympy
+    sympy = None
 
 # ==============================================================================
-# 1. KHỞI TẠO ĐƯỜNG DẪN HỆ THỐNG & TỰ ĐỘNG GIẢI NÉN FILE ZIP CÓ SẴN TRÊN REPO
+# 1. KHỦY TẠO ĐƯỜNG DẪN HỆ THỐNG & TỰ ĐỘNG GIẢI NÉN FILE ZIP CÓ SẴN TRÊN REPO
 # ==============================================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
@@ -56,8 +55,11 @@ if os.path.exists(TOPICS_DIR):
 # ==============================================================================
 st.set_page_config(page_title="Hệ Thống Trộn Đề & Tạo Đề LaTeX Pro", page_icon="📝", layout="wide")
 
+if sympy is None:
+    st.warning("⚠️ Thư viện `sympy` chưa được cài đặt trong môi trường. Hãy đảm bảo bạn đã thêm `sympy` vào file `requirements.txt` trên GitHub.")
+
 # ==============================================================================
-# 3. CÁC HÀM XỬ LÝ NỘI DUNG LATEX VÀ MODULE PYTHON
+# 3. CÁC HÀM XỬ LÝ NỘI DUNG LATEX, MODULE PYTHON VÀ BIÊN DỊCH PDF
 # ==============================================================================
 ex_pattern = re.compile(r'\\begin{ex}.*?\\end{ex}', re.DOTALL)
 
@@ -99,6 +101,33 @@ def add_folder_to_zip(zip_file, folder_name, dest_prefix):
                 rel_path = os.path.relpath(full_path, full_folder_path)
                 zip_file.write(full_path, arcname=f"{dest_prefix}/{rel_path}")
 
+def compile_tex_to_pdf(tex_content, work_dir=None):
+    """Hàm biên dịch mã LaTeX trực tiếp thành file PDF bytes qua pdflatex"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        if work_dir and os.path.exists(work_dir):
+            import shutil
+            shutil.copytree(work_dir, tmpdir, dirs_exist_ok=True)
+
+        tex_path = os.path.join(tmpdir, "document.tex")
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(tex_content)
+
+        for _ in range(2):
+            cmd = ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "document.tex"]
+            result = subprocess.run(cmd, cwd=tmpdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        pdf_path = os.path.join(tmpdir, "document.pdf")
+        if os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as f:
+                return f.read(), None
+        else:
+            log_path = os.path.join(tmpdir, "document.log")
+            log_content = ""
+            if os.path.exists(log_path):
+                with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                    log_content = f.read()
+            return None, log_content if log_content else result.stdout
+
 # ==============================================================================
 # 4. GIAO DIỆN CHÍNH (3 TABS)
 # ==============================================================================
@@ -111,7 +140,10 @@ with tab1:
     st.title("🚀 TRỘN ĐỀ LATEX DIRECT")
     st.info("Tính năng trộn câu hỏi từ mã LaTeX trực tiếp.")
     tex_input = st.text_area("Dán mã nguồn LaTeX cần trộn câu hỏi vào đây:", height=300, key="t1_input")
-    num_mix = st.number_input("Số lượng đề hoán vị cần tạo:", min_value=1, max_value=20, value=2, key="t1_num")
+    
+    col_t1_a, col_t1_b = st.columns([1, 1])
+    with col_t1_a:
+        num_mix = st.number_input("Số lượng đề hoán vị cần tạo:", min_value=1, max_value=20, value=2, key="t1_num")
     
     if st.button("🚀 Trộn đề ngay", type="primary", key="t1_btn"):
         if tex_input.strip():
@@ -160,6 +192,11 @@ with tab2:
 with tab3:
     st.title("📝 HỆ THỐNG TẠO ĐỀ THI TỰ ĐỘNG")
     st.write("Hệ thống kết nối trực tiếp với thư mục `topics` trên Server hoặc tiếp nhận file ZIP nén bộ bài tập.")
+
+    # --------------------------------------------------------------------------
+    # CONTAINER VÙNG XUẤT VÀ TẢI ĐỀ THI ĐƯỢC ĐẶT LÊN ĐẦU TRANG
+    # --------------------------------------------------------------------------
+    export_top_container = st.container()
 
     col1, col2 = st.columns([1, 1])
     with col1:
@@ -315,7 +352,7 @@ with tab3:
         st.markdown("---")
 
         # ----------------------------------------------------------------------
-        # HÀM XUẤT PROJECT ĐỀ THI
+        # HÀM XUẤT PROJECT ĐỀ THI (HIỂN THỊ LÊN VÙNG TOP CONTAINER)
         # ----------------------------------------------------------------------
         def run_export():
             now = datetime.now()
@@ -329,7 +366,7 @@ with tab3:
                     final_content = ""
                     counts = {"ATN": 0, "BTF": 0, "CDK": 0}
 
-                    # Tạo sẵn thư mục 'ans' cùng cấp với 'khaibao' bằng các file rỗng
+                    # Tạo thư mục 'ans/' cùng cấp với 'khaibao'
                     zip_file.writestr(f"{folder_de}/ans/atn_D{de_idx}.tex", "% File dap an ATN\n")
                     zip_file.writestr(f"{folder_de}/ans/btf_D{de_idx}.tex", "% File dap an BTF\n")
                     zip_file.writestr(f"{folder_de}/ans/cdk_D{de_idx}.tex", "% File dap an CDK\n")
@@ -405,18 +442,21 @@ with tab3:
 \\end{{document}}"""
                     zip_file.writestr(f"{folder_de}/Main_DA_De{de_idx}_{time_str}.tex", da_tex)
 
-                    # Đóng gói thư mục khai bao và hotro vào từng mã đề
+                    # Đóng gói thư mục khaibao và hotro vào từng mã đề
                     add_folder_to_zip(zip_file, "khaibao", f"{folder_de}/khaibao")
                     add_folder_to_zip(zip_file, "hotro", f"{folder_de}")
 
             if temp_dir:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
-            st.success("🎉 Đã khởi tạo thành công Project Đề thi!")
-            st.download_button("📦 Tải về bộ Project Đề Thi (.ZIP)", zip_buffer.getvalue(), f"Project_DeThi_{time_str}.zip", "application/zip")
+            # XUẤT KẾT QUẢ LÊN ĐẦU TRANG
+            with export_top_container:
+                st.success("🎉 Đã khởi tạo thành công Project Đề thi!")
+                st.download_button("📦 Tải về bộ Project Đề Thi (.ZIP)", zip_buffer.getvalue(), f"Project_DeThi_{time_str}.zip", "application/zip")
+                st.divider()
 
         # ----------------------------------------------------------------------
-        # KIỂM TRA ĐỦ / THIẾU / DƯ CÂU HỎI KHI BẤM NÚT XUẤT ĐỀ
+        # NÚT XUẤT ĐỀ VÀ KIỂM TRA CHỈ TIÊU SỐ CÂU
         # ----------------------------------------------------------------------
         if st.button("🚀 BẮT ĐẦU XUẤT PROJECT ĐỀ THI (.ZIP)", type="primary", key="btn_export_project"):
             errors = []
@@ -438,16 +478,17 @@ with tab3:
                         warnings.append(f"⚠️ **Đề {de_idx} - Loại {dtype}:** Chỉ tiêu **{target}** câu nhưng bạn đã chọn **{act}** câu (Dư **{act - target}** câu).")
 
             if errors or warnings:
-                st.subheader("⚠️ CẢNH BÁO SỐ LƯỢNG CÂU HỎI")
-                
-                for err in errors:
-                    st.error(err)
-                for warn in warnings:
-                    st.warning(warn)
+                with export_top_container:
+                    st.subheader("⚠️ CẢNH BÁO SỐ LƯỢNG CÂU HỎI")
+                    for err in errors:
+                        st.error(err)
+                    for warn in warnings:
+                        st.warning(warn)
 
-                st.info("💡 Bạn có thể quay lại điều chỉnh chỉ tiêu hoặc chọn thêm/bớt câu hỏi bên trên, hoặc bấm nút dưới đây để bỏ qua cảnh báo và tạo đề ngay.")
-                
-                if st.button("⚠️ Bỏ qua cảnh báo & Vẫn tiếp tục xuất đề", key="btn_force_export"):
-                    run_export()
+                    st.info("💡 Bạn có thể quay lại điều chỉnh chỉ tiêu hoặc chọn thêm/bớt câu hỏi bên dưới, hoặc bấm nút dưới đây để bỏ qua cảnh báo và tạo đề ngay.")
+                    
+                    if st.button("⚠️ Bỏ qua cảnh báo & Vẫn tiếp tục xuất đề", key="btn_force_export"):
+                        run_export()
+                    st.divider()
             else:
                 run_export()
