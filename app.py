@@ -1,34 +1,74 @@
 import streamlit as st
-import os, sys, re, random, zipfile, io, shutil, importlib.util, tempfile, traceback
+import os
+import sys
+import re
+import random
+import zipfile
+import io
+import shutil
+import importlib.util
+import tempfile
+import traceback
 from datetime import datetime
 from PIL import Image
 
-# ------------------------------------------------------------------------------
-# KHỞI TẠO ĐƯỜNG DẪN HỆ THỐNG (ĐẢM BẢO IMPORT MODULE NỘI BỘ KHÔNG LỖI)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 1. KHỞI TẠO ĐƯỜNG DẪN HỆ THỐNG & TỰ ĐỘNG GIẢI NÉN FILE ZIP CÓ SẴN TRÊN REPO
+# ==============================================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-# --- CẤU HÌNH TRANG ---
-st.set_page_config(page_title="Hệ Thống Tạo Đề LaTeX Pro", page_icon="📝", layout="wide")
+# Danh sách các file ZIP cần tự động giải nén khi ứng dụng khởi chạy
+AUTO_UNZIP_FILES = ["topics.zip", "khaibao.zip", "hotro.zip", "tieude.zip"]
+
+for zip_filename in AUTO_UNZIP_FILES:
+    zip_path = os.path.join(BASE_DIR, zip_filename)
+    folder_name = zip_filename.replace(".zip", "")
+    target_dir = os.path.join(BASE_DIR, folder_name)
+    
+    # Giải nén tự động nếu phát hiện file ZIP và chưa có thư mục tương ứng
+    if os.path.exists(zip_path) and not os.path.exists(target_dir):
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zref:
+                zref.extractall(BASE_DIR)
+        except Exception as e:
+            st.error(f"Lỗi khi giải nén {zip_filename}: {e}")
+
+# Tự động nạp tất cả thư mục con trong topics vào sys.path để hỗ trợ import chéo module Python
+TOPICS_DIR = os.path.join(BASE_DIR, "topics")
+if os.path.exists(TOPICS_DIR):
+    if TOPICS_DIR not in sys.path:
+        sys.path.insert(0, TOPICS_DIR)
+    for root, dirs, _ in os.walk(TOPICS_DIR):
+        for d in dirs:
+            sp = os.path.join(root, d)
+            if sp not in sys.path:
+                sys.path.insert(0, sp)
 
 # ==============================================================================
-# --- CÁC HÀM XỬ LÝ NỘI DUNG LATEX & PYTHON ---
+# 2. CẤU HÌNH TRANG STREAMLIT
+# ==============================================================================
+st.set_page_config(page_title="Hệ Thống Trộn Đề & Tạo Đề LaTeX Pro", page_icon="📝", layout="wide")
+
+# ==============================================================================
+# 3. CÁC HÀM XỬ LÝ NỘI DUNG LATEX VÀ MODULE PYTHON
 # ==============================================================================
 ex_pattern = re.compile(r'\\begin{ex}.*?\\end{ex}', re.DOTALL)
 
 def extract_from_tex_file(file_path):
+    """Trích xuất danh sách các câu hỏi \begin{ex}...\end{ex} từ file .tex"""
     try:
-        with open(file_path, 'r', encoding='utf-8') as f: content = f.read()
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
     except:
-        with open(file_path, 'r', encoding='latin-1') as f: content = f.read()
+        with open(file_path, 'r', encoding='latin-1') as f:
+            content = f.read()
     return ex_pattern.findall(content)
 
 def generate_from_py_file(file_path):
-    """Import động module Python và gọi hàm generate()"""
+    """Import động module Python sinh đề và gọi hàm generate()"""
     try:
-        # Thêm thư mục chứa file vào sys.path để hỗ trợ import chéo
         file_dir = os.path.dirname(file_path)
         if file_dir not in sys.path:
             sys.path.insert(0, file_dir)
@@ -48,7 +88,7 @@ def generate_from_py_file(file_path):
         return f"% Lỗi Python tại {os.path.basename(file_path)}:\n% {traceback.format_exc()}"
 
 def add_folder_to_zip(zip_file, folder_name, dest_prefix):
-    """Copy thư mục cấu trúc (khaibao, hotro) vào file ZIP xuất ra"""
+    """Thêm toàn bộ tài nguyên cấu trúc (khaibao, hotro) vào file ZIP xuất ra"""
     full_folder_path = os.path.join(BASE_DIR, folder_name)
     if os.path.exists(full_folder_path):
         for root, _, files in os.walk(full_folder_path):
@@ -58,16 +98,66 @@ def add_folder_to_zip(zip_file, folder_name, dest_prefix):
                 zip_file.write(full_path, arcname=f"{dest_prefix}/{rel_path}")
 
 # ==============================================================================
-# --- GIAO DIỆN CHÍNH ---
+# 4. GIAO DIỆN CHÍNH (3 TABS)
 # ==============================================================================
 tab1, tab2, tab3 = st.tabs(["🚀 Trộn Đề LaTeX Direct", "🖼️ Chuyển Ảnh sang PDF", "📝 Tạo Đề Từ Data / Topics"])
 
 # ------------------------------------------------------------------------------
-# TAB 3: HỆ THỐNG TẠO ĐỀ TỪ NGUỒN CẤU TRÚC PHỨC TẠP
+# TAB 1: TRỘN ĐỀ LATEX DIRECT
+# ------------------------------------------------------------------------------
+with tab1:
+    st.title("🚀 TRỘN ĐỀ LATEX DIRECT")
+    st.info("Tính năng trộn câu hỏi từ mã LaTeX trực tiếp.")
+    tex_input = st.text_area("Dán mã nguồn LaTeX cần trộn câu hỏi vào đây:", height=300, key="t1_input")
+    num_mix = st.number_input("Số lượng đề hoán vị cần tạo:", min_value=1, max_value=20, value=2, key="t1_num")
+    
+    if st.button("🚀 Trộn đề ngay", type="primary", key="t1_btn"):
+        if tex_input.strip():
+            blocks = ex_pattern.findall(tex_input)
+            if not blocks:
+                st.warning("Không tìm thấy khối câu hỏi \\begin{ex}...\\end{ex} nào trong nội dung dán vào.")
+            else:
+                zip_buf = io.BytesIO()
+                with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for i in range(1, num_mix + 1):
+                        shuffled_blocks = list(blocks)
+                        random.shuffle(shuffled_blocks)
+                        new_content = ex_pattern.sub(lambda m: shuffled_blocks.pop(0), tex_input)
+                        zf.writestr(f"De_Tron_{i}.tex", new_content)
+                st.success(f"Đã trộn thành công {num_mix} mã đề từ {len(blocks)} câu hỏi!")
+                st.download_button("📦 Tải về đề đã trộn (.ZIP)", zip_buf.getvalue(), "De_Tron_LaTeX.zip", "application/zip")
+        else:
+            st.error("Vui lòng dán mã LaTeX trước khi trộn!")
+
+# ------------------------------------------------------------------------------
+# TAB 2: CHUYỂN ĐỔI ÁNH SANG PDF
+# ------------------------------------------------------------------------------
+with tab2:
+    st.title("🖼️ CHUYỂN ĐỔI BỘ CÂU HỎI DẠNG ÁNH SANG PDF")
+    uploaded_imgs = st.file_uploader("Chọn danh sách các file ảnh:", type=["jpg", "jpeg", "png"], accept_multiple_files=True, key="t2_uploader")
+    
+    if uploaded_imgs and st.button("🖼️ Chuyển đổi sang PDF", type="primary", key="t2_btn"):
+        try:
+            img_list = []
+            for img_file in uploaded_imgs:
+                image = Image.open(img_file)
+                if image.mode != 'RGB':
+                    image = image.convert('RGB')
+                img_list.append(image)
+            
+            pdf_buf = io.BytesIO()
+            img_list[0].save(pdf_buf, format="PDF", save_all=True, append_images=img_list[1:])
+            st.success(f"Đã gộp thành công {len(img_list)} ảnh thành file PDF!")
+            st.download_button("📄 Tải file PDF", pdf_buf.getvalue(), "Bo_Cau_Hoi_Anh.pdf", "application/pdf")
+        except Exception as e:
+            st.error(f"Có lỗi khi chuyển đổi ảnh: {e}")
+
+# ------------------------------------------------------------------------------
+# TAB 3: HỆ THỐNG TẠO ĐỀ TỰ ĐỘNG TỪ NGUỒN CẤU TRÚC ĐA MỤC/FILE
 # ------------------------------------------------------------------------------
 with tab3:
     st.title("📝 HỆ THỐNG TẠO ĐỀ THI TỰ ĐỘNG")
-    st.write("Hệ thống tự động kết nối thư mục `topics` trên Server hoặc tiếp nhận file ZIP thư mục bài tập tải lên.")
+    st.write("Hệ thống kết nối trực tiếp với thư mục `topics` trên Server hoặc tiếp nhận file ZIP nén bộ bài tập.")
 
     col1, col2 = st.columns([1, 1])
     with col1:
@@ -88,7 +178,6 @@ with tab3:
         if source_option == "Tải lên file ZIP/File rời mới":
             uploaded_files = st.file_uploader("Tải lên file topics.zip hoặc danh sách file .py/.tex", type=["zip", "tex", "py"], accept_multiple_files=True, key="t3_uploader")
 
-    # Xác định thư mục dữ liệu cần quét
     scan_dir = None
     temp_dir = None
 
@@ -112,7 +201,7 @@ with tab3:
             scan_dir = temp_dir
 
     if scan_dir:
-        # Thêm tất cả thư mục con vào sys.path
+        # Nạp tất cả thư mục quét vào hệ thống sys.path
         if scan_dir not in sys.path:
             sys.path.insert(0, scan_dir)
         for root, dirs, _ in os.walk(scan_dir):
@@ -121,7 +210,7 @@ with tab3:
                 if sp not in sys.path:
                     sys.path.insert(0, sp)
 
-        # Quét danh sách bài tập
+        # Quét danh sách file bài tập .py và .tex
         q_data_list = []
         for root, _, files in os.walk(scan_dir):
             for f in sorted(files):
@@ -147,18 +236,18 @@ with tab3:
             with sub_tabs[i]:
                 items = [x for x in q_data_list if x['type'] == dtype]
                 if not items:
-                    st.info(f"Không có file nào thuộc loại {dtype}")
+                    st.info(f"Không tìm thấy file nào thuộc loại {dtype}")
                 for item in items:
                     if item["ext"] == "PY":
-                        st.write(f"🐍 **{item['display']}** *(Script sinh ngẫu nhiên)*")
-                        cnt = st.number_input(f"Số lượng câu sinh từ {item['display']}:", min_value=0, max_value=50, value=1, key=f"spin_{item['path']}")
+                        st.write(f"🐍 **{item['display']}** *(Script sinh câu hỏi ngẫu nhiên)*")
+                        cnt = st.number_input(f"Số câu sinh ra từ {item['display']}:", min_value=0, max_value=50, value=1, key=f"spin_{item['path']}")
                     else:
                         blks = extract_from_tex_file(item['path'])
                         st.write(f"📄 **{item['display']}** *(File tĩnh - Có {len(blks)} câu)*")
-                        cnt = st.number_input(f"Số lượng câu lấy từ {item['display']}:", min_value=0, max_value=max(1, len(blks)), value=min(2, len(blks)), key=f"spin_{item['path']}")
+                        cnt = st.number_input(f"Số câu lấy từ {item['display']}:", min_value=0, max_value=max(1, len(blks)), value=min(2, len(blks)), key=f"spin_{item['path']}")
                     selected_counts[item['path']] = cnt
 
-        # Đọc tiêu đề phần
+        # Đọc tiêu đề các phần câu hỏi
         td_defaults = {1: "", 2: "", 3: "", 4: ""}
         for j in range(1, 5):
             for path_check in [os.path.join(BASE_DIR, "tieude", f"title_{j}.tex"), os.path.join(BASE_DIR, "tieudechinh", f"title_{j}.tex")]:
@@ -167,6 +256,7 @@ with tab3:
                         td_defaults[j] = f.read().strip()
                     break
 
+        # Nút bấm xuất Project Đề Thi
         if st.button("🚀 BẮT ĐẦU XUẤT PROJECT ĐỀ THI (.ZIP)", type="primary", key="btn_export_project"):
             now = datetime.now()
             time_str = now.strftime("%d-%m-%Y_%Hh%Mm%Ss")
@@ -185,19 +275,23 @@ with tab3:
 
                         for item in items:
                             n = selected_counts.get(item['path'], 0)
-                            if n <= 0: continue
+                            if n <= 0:
+                                continue
 
                             if item["ext"] == "PY":
                                 for _ in range(n):
                                     val = generate_from_py_file(item['path'])
-                                    if val: sec_txt += val + "\n"
-                                if dtype in counts: counts[dtype] += n
+                                    if val:
+                                        sec_txt += val + "\n"
+                                if dtype in counts:
+                                    counts[dtype] += n
                             else:
                                 blks = extract_from_tex_file(item['path'])
                                 if blks:
                                     chosen = random.sample(blks, min(n, len(blks)))
                                     sec_txt += "\n".join(chosen) + "\n"
-                                    if dtype in counts: counts[dtype] += len(chosen)
+                                    if dtype in counts:
+                                        counts[dtype] += len(chosen)
 
                         if sec_txt:
                             idx_type = {"ATN": 1, "BTF": 2, "CDK": 3, "Khác": 4}[dtype]
@@ -211,9 +305,10 @@ with tab3:
                             else:
                                 final_content += f"\n{header_title}\n{sec_txt}\n"
 
-                    # Ghi các file xuất
+                    # Ghi nội dung đề vào folder_de/data/content.tex
                     zip_file.writestr(f"{folder_de}/data/content.tex", final_content)
 
+                    # File Main_De.tex
                     main_tex = f"""\\documentclass[11pt,a4paper]{{extbook}}
 \\input{{khaibao/khaibao-main}}
 \\input{{khaibao/Khaibao_Standard}}
@@ -229,6 +324,7 @@ with tab3:
 \\end{{document}}"""
                     zip_file.writestr(f"{folder_de}/Main_De{de_idx}_{time_str}.tex", main_tex)
 
+                    # File Main_DA.tex (Đáp án)
                     da_tex = f"""\\documentclass[11pt,a4paper]{{extbook}}
 \\input{{khaibao/khaibao-main}}
 \\input{{khaibao/Khaibao_Standard}}
@@ -244,12 +340,12 @@ with tab3:
 \\end{{document}}"""
                     zip_file.writestr(f"{folder_de}/Main_DA_De{de_idx}_{time_str}.tex", da_tex)
 
-                    # Đóng gói khai bao va hotro
+                    # Nén bổ sung folder khai bao và hotro vào từng mã đề
                     add_folder_to_zip(zip_file, "khaibao", f"{folder_de}/khaibao")
                     add_folder_to_zip(zip_file, "hotro", f"{folder_de}")
 
             if temp_dir:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
-            st.success("🎉 Đã xuất thành công bộ Project đề thi!")
-            st.download_button("📦 Tải về bộ Project (.ZIP)", zip_buffer.getvalue(), f"Project_DeThi_{time_str}.zip", "application/zip")
+            st.success("🎉 Đã khởi tạo thành công Project Đề thi!")
+            st.download_button("📦 Tải về bộ Project Đề Thi (.ZIP)", zip_buffer.getvalue(), f"Project_DeThi_{time_str}.zip", "application/zip")
