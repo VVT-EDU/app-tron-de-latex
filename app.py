@@ -163,27 +163,32 @@ with tab2:
 # TAB 3: HỆ THỐNG TẠO ĐỀ TỰ ĐỘNG
 # ------------------------------------------------------------------------------
 with tab3:
-    st.title("📝 HỆ THỐNG TẠO ĐỀ THI TỰ ĐỘNG")
-    st.write("Hệ thống kết nối trực tiếp với thư mục `topics` trên Server hoặc tiếp nhận file ZIP nén bộ bài tập.")
+    st.subheader("📝 HỆ THỐNG TẠO ĐỀ THI TỰ ĐỘNG")
 
-    col1, col2 = st.columns([1, 1])
-    with col1:
+    # Dàn hàng ngang toàn bộ các ô nhập thông số (Tối ưu không gian)
+    c_hk, c_nam, c_mon, c_phut, c_sode = st.columns([1, 1.2, 1.5, 1.2, 1.2])
+    with c_hk:
         hk = st.text_input("Học kỳ:", "II", key="t3_hk")
+    with c_nam:
         nam = st.text_input("Năm học:", "2025 - 2026", key="t3_nam")
+    with c_mon:
         mon = st.text_input("Môn học:", "TOÁN 11", key="t3_mon")
+    with c_phut:
         phut = st.text_input("Thời gian (phút):", "90", key="t3_phut")
-        so_de = st.number_input("Số lượng đề cần xuất:", min_value=1, max_value=10, value=2, key="t3_sode")
+    with c_sode:
+        so_de = st.number_input("Số đề cần xuất:", min_value=1, max_value=10, value=2, key="t3_sode")
 
-    with col2:
-        source_option = st.radio(
-            "Nguồn dữ liệu câu hỏi:", 
-            ["Dùng thư mục `topics` sẵn có trên Server", "Tải lên file ZIP/File rời mới"],
-            key="t3_source_opt"
-        )
-        
-        uploaded_files = None
-        if source_option == "Tải lên file ZIP/File rời mới":
-            uploaded_files = st.file_uploader("Tải lên file topics.zip hoặc danh sách file .py/.tex", type=["zip", "tex", "py"], accept_multiple_files=True, key="t3_uploader")
+    # Nguồn dữ liệu dạng nằm ngang
+    source_option = st.radio(
+        "Nguồn dữ liệu câu hỏi:", 
+        ["Dùng thư mục `topics` sẵn có trên Server", "Tải lên file ZIP/File rời mới"],
+        horizontal=True,
+        key="t3_source_opt"
+    )
+    
+    uploaded_files = None
+    if source_option == "Tải lên file ZIP/File rời mới":
+        uploaded_files = st.file_uploader("Tải lên file topics.zip hoặc danh sách file .py/.tex", type=["zip", "tex", "py"], accept_multiple_files=True, key="t3_uploader")
 
     scan_dir = None
     temp_dir = None
