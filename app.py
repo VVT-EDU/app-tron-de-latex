@@ -311,8 +311,6 @@ with tab3:
                         td_defaults[j] = raw_td.strip()
                     break
 
-        st.markdown("---")
-
         # HÀM XỬ LÝ TẠO ZIP THỰC SỰ
         def execute_export():
             now = datetime.now()
@@ -435,13 +433,13 @@ with tab3:
         
         # Nếu đã xuất đề xong, hiển thị thông báo thành công
         if st.session_state.get('export_completed', False):
-            st.success("🎉 Đã khởi tạo thành công Project Đề thi!")[cite: 7]
+            st.success("🎉 Đã khởi tạo thành công Project Đề thi!")
 
         # Chia thành 2 cột nằm song song sát nhau
         col_btn1, col_btn2 = st.columns([1, 1])
 
         with col_btn1:
-            btn_start = st.button("🚀 BẮT ĐẦU XUẤT PROJECT ĐỀ THI (.ZIP)", type="primary", key="btn_export_project", use_container_width=True)[cite: 8]
+            btn_start = st.button("🚀 BẮT ĐẦU XUẤT PROJECT ĐỀ THI (.ZIP)", type="primary", key="btn_export_project", use_container_width=True)
             if btn_start:
                 errors = []
                 warnings = []
@@ -466,7 +464,7 @@ with tab3:
         with col_btn2:
             if st.session_state.get('export_completed', False):
                 st.download_button(
-                    label="📦 TẢI VỀ BỘ PROJECT ĐỀ THI (.ZIP)",[cite: 7]
+                    label="📦 TẢI VỀ BỘ PROJECT ĐỀ THI (.ZIP)",
                     data=st.session_state.get('zip_bytes', b''), 
                     file_name=st.session_state.get('zip_filename', 'Project_DeThi.zip'), 
                     mime="application/zip",
