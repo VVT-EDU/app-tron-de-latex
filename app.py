@@ -187,13 +187,13 @@ with tab2:
             st.error(f"Có lỗi khi chuyển đổi ảnh: {e}")
 
 # ------------------------------------------------------------------------------
-# TAB 3: HỆ THỐNG TẠO ĐỀ TỰ ĐỘNG (ĐÃ TỐI ƯU CÓ TÍN HIỆU & ĐƯA LÊN ĐẦU TRANG)
+# TAB 3: HỆ THỐNG TẠO ĐỀ TỰ ĐỘNG
 # ------------------------------------------------------------------------------
 with tab3:
     st.title("📝 HỆ THỐNG TẠO ĐỀ THI TỰ ĐỘNG")
     st.write("Hệ thống kết nối trực tiếp với thư mục `topics` trên Server hoặc tiếp nhận file ZIP nén bộ bài tập.")
 
-    # VÙNG CONTAINER XUẤT ĐỀ VÀ THÔNG BÁO CỐ ĐỊNH Ở ĐẦU TRANG
+    # KHỐI CONTAINER TẢI ĐỀ HIỂN THỊ TRÊN ĐẦU
     export_top_container = st.container()
 
     col1, col2 = st.columns([1, 1])
@@ -343,66 +343,62 @@ with tab3:
 
         st.markdown("---")
 
-        # HÀM XUẤT PROJECT VỚI BÁO HIỆU TRẠNG THÁI RÕ RÀNG
-        def run_export():
-            with export_top_container:
-                with st.spinner("⏳ Đang tổng hợp dữ liệu và tạo bộ Project đề thi... Vui lòng chờ!"):
-                    try:
-                        now = datetime.now()
-                        time_str = now.strftime("%d-%m-%Y_%Hh%Mm%Ss")
-                        zip_buffer = io.BytesIO()
+        # HÀM XỬ LÝ TẠO ZIP THỰC SỰ
+        def execute_export():
+            now = datetime.now()
+            time_str = now.strftime("%d-%m-%Y_%Hh%Mm%Ss")
+            zip_buffer = io.BytesIO()
 
-                        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                            for de_idx in range(1, so_de + 1):
-                                folder_de = f"De_0{de_idx}_{time_str}"
-                                ma_de = f"{de_idx}{random.randint(11, 99)}"
-                                final_content = ""
-                                counts = {"ATN": 0, "BTF": 0, "CDK": 0}
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for de_idx in range(1, so_de + 1):
+                    folder_de = f"De_0{de_idx}_{time_str}"
+                    ma_de = f"{de_idx}{random.randint(11, 99)}"
+                    final_content = ""
+                    counts = {"ATN": 0, "BTF": 0, "CDK": 0}
 
-                                # Tạo thư mục 'ans/'
-                                zip_file.writestr(f"{folder_de}/ans/atn_D{de_idx}.tex", "% File dap an ATN\n")
-                                zip_file.writestr(f"{folder_de}/ans/btf_D{de_idx}.tex", "% File dap an BTF\n")
-                                zip_file.writestr(f"{folder_de}/ans/cdk_D{de_idx}.tex", "% File dap an CDK\n")
+                    zip_file.writestr(f"{folder_de}/ans/atn_D{de_idx}.tex", "% File dap an ATN\n")
+                    zip_file.writestr(f"{folder_de}/ans/btf_D{de_idx}.tex", "% File dap an BTF\n")
+                    zip_file.writestr(f"{folder_de}/ans/cdk_D{de_idx}.tex", "% File dap an CDK\n")
 
-                                for dtype in ["ATN", "BTF", "CDK", "Khác"]:
-                                    sec_txt = ""
-                                    items = [x for x in q_data_list if x['type'] == dtype]
+                    for dtype in ["ATN", "BTF", "CDK", "Khác"]:
+                        sec_txt = ""
+                        items = [x for x in q_data_list if x['type'] == dtype]
 
-                                    for item in items:
-                                        n = selected_counts[de_idx].get(item['path'], 0)
-                                        if n <= 0:
-                                            continue
+                        for item in items:
+                            n = selected_counts[de_idx].get(item['path'], 0)
+                            if n <= 0:
+                                continue
 
-                                        if item["ext"] == "PY":
-                                            for _ in range(n):
-                                                val = generate_from_py_file(item['path'])
-                                                if val:
-                                                    sec_txt += val + "\n"
-                                            if dtype in counts:
-                                                counts[dtype] += n
-                                        else:
-                                            blks = extract_from_tex_file(item['path'])
-                                            if blks:
-                                                chosen = random.sample(blks, min(n, len(blks)))
-                                                sec_txt += "\n".join(chosen) + "\n"
-                                                if dtype in counts:
-                                                    counts[dtype] += len(chosen)
+                            if item["ext"] == "PY":
+                                for _ in range(n):
+                                    val = generate_from_py_file(item['path'])
+                                    if val:
+                                        sec_txt += val + "\n"
+                                if dtype in counts:
+                                    counts[dtype] += n
+                            else:
+                                blks = extract_from_tex_file(item['path'])
+                                if blks:
+                                    chosen = random.sample(blks, min(n, len(blks)))
+                                    sec_txt += "\n".join(chosen) + "\n"
+                                    if dtype in counts:
+                                        counts[dtype] += len(chosen)
 
-                                    if sec_txt:
-                                        idx_type = {"ATN": 1, "BTF": 2, "CDK": 3, "Khác": 4}[dtype]
-                                        header_title = td_defaults[idx_type]
-                                        if dtype in ["ATN", "BTF", "CDK"]:
-                                            if header_title:
-                                                header_title = re.sub(r"\[ans/.*?\]", f"[ans/{dtype.lower()}_D{de_idx}]", header_title)
-                                            else:
-                                                header_title = f"\\Opensolutionfile{{ans}}[ans/{dtype.lower()}_D{de_idx}]"
-                                            final_content += f"\n{header_title}\n{sec_txt}\n\\Closesolutionfile{{ans}}\n"
-                                        else:
-                                            final_content += f"\n{header_title}\n{sec_txt}\n"
+                        if sec_txt:
+                            idx_type = {"ATN": 1, "BTF": 2, "CDK": 3, "Khác": 4}[dtype]
+                            header_title = td_defaults[idx_type]
+                            if dtype in ["ATN", "BTF", "CDK"]:
+                                if header_title:
+                                    header_title = re.sub(r"\[ans/.*?\]", f"[ans/{dtype.lower()}_D{de_idx}]", header_title)
+                                else:
+                                    header_title = f"\\Opensolutionfile{{ans}}[ans/{dtype.lower()}_D{de_idx}]"
+                                final_content += f"\n{header_title}\n{sec_txt}\n\\Closesolutionfile{{ans}}\n"
+                            else:
+                                final_content += f"\n{header_title}\n{sec_txt}\n"
 
-                                zip_file.writestr(f"{folder_de}/data/content.tex", final_content)
+                    zip_file.writestr(f"{folder_de}/data/content.tex", final_content)
 
-                                main_tex = f"""\\documentclass[11pt,a4paper]{{extbook}}
+                    main_tex = f"""\\documentclass[11pt,a4paper]{{extbook}}
 \\input{{khaibao/khaibao-main}}
 \\input{{khaibao/Khaibao_Standard}}
 \\input{{khaibao/trang}}
@@ -415,9 +411,9 @@ with tab3:
 \\vfill
 \\input{{khaibao/thongtin-thisinh}}
 \\end{{document}}"""
-                                zip_file.writestr(f"{folder_de}/Main_De{de_idx}_{time_str}.tex", main_tex)
+                    zip_file.writestr(f"{folder_de}/Main_De{de_idx}_{time_str}.tex", main_tex)
 
-                                da_tex = f"""\\documentclass[11pt,a4paper]{{extbook}}
+                    da_tex = f"""\\documentclass[11pt,a4paper]{{extbook}}
 \\input{{khaibao/khaibao-main}}
 \\input{{khaibao/Khaibao_Standard}}
 \\input{{khaibao/trang}}
@@ -430,24 +426,39 @@ with tab3:
 \\subsubsection*{{III. Trả lời ngắn}} \\inputansbox[1]{{{counts['CDK']}}}{{ans/cdk_D{de_idx}}}
 \\vspace{{0.5cm}}\\input{{khaibao/dau-bang-da}}\\input{{khaibao/da_de}}\\input{{khaibao/cuoi-bang-da}}
 \\end{{document}}"""
-                                zip_file.writestr(f"{folder_de}/Main_DA_De{de_idx}_{time_str}.tex", da_tex)
+                    zip_file.writestr(f"{folder_de}/Main_DA_De{de_idx}_{time_str}.tex", da_tex)
 
-                                add_folder_to_zip(zip_file, "khaibao", f"{folder_de}/khaibao")
-                                add_folder_to_zip(zip_file, "hotro", f"{folder_de}")
+                    add_folder_to_zip(zip_file, "khaibao", f"{folder_de}/khaibao")
+                    add_folder_to_zip(zip_file, "hotro", f"{folder_de}")
 
-                        if temp_dir:
-                            shutil.rmtree(temp_dir, ignore_errors=True)
+            if temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
-                        # Lưu vào session_state để duy trì sau khi rerun
-                        st.session_state['export_completed'] = True
-                        st.session_state['zip_bytes'] = zip_buffer.getvalue()
-                        st.session_state['zip_filename'] = f"Project_DeThi_{time_str}.zip"
+            st.session_state['export_completed'] = True
+            st.session_state['zip_bytes'] = zip_buffer.getvalue()
+            st.session_state['zip_filename'] = f"Project_DeThi_{time_str}.zip"
 
-                    except Exception as ex:
-                        st.error(f"❌ Có lỗi phát sinh khi xuất file: {ex}")
-                        st.code(traceback.format_exc())
+        # TẠO POPUP HỘI THOẠI XUẤT ĐỀ VÀ CẢNH BÁO
+        @st.dialog("🚀 TIẾN TRÌNH XUẤT PROJECT ĐỀ THI")
+        def process_export_dialog(errors, warnings):
+            if errors or warnings:
+                st.warning("⚠️ **Phát hiện chênh lệch chỉ tiêu câu hỏi:**")
+                for err in errors:
+                    st.error(err)
+                for warn in warnings:
+                    st.caption(warn)
+                
+                st.info("Bấm nút bên dưới nếu bạn vẫn muốn bỏ qua cảnh báo để tạo đề:")
+                if st.button("⚠️ Bỏ qua cảnh báo & Tạo đề ngay", type="primary", use_container_width=True):
+                    with st.spinner("⏳ Đang tạo bộ đề thi ZIP..."):
+                        execute_export()
+                    st.rerun()
+            else:
+                with st.spinner("⏳ Đang khởi tạo Project Đề thi... Vui lòng chờ!"):
+                    execute_export()
+                st.rerun()
 
-        # HIỂN THỊ KẾT QUẢ TRÊN TOP CONTAINER
+        # HIỂN THỊ NÚT TẢI VỀ NẾU ĐÃ TẠO XONG
         if st.session_state.get('export_completed', False):
             with export_top_container:
                 st.success("🎉 Đã khởi tạo thành công Project Đề thi!")
@@ -456,11 +467,12 @@ with tab3:
                     data=st.session_state.get('zip_bytes', b''), 
                     file_name=st.session_state.get('zip_filename', 'Project_DeThi.zip'), 
                     mime="application/zip",
-                    type="primary"
+                    type="primary",
+                    use_container_width=True
                 )
                 st.divider()
 
-        # NÚT XUẤT ĐỀ VÀ KIỂM TRA CHỈ TIÊU
+        # NÚT KÍCH HOẠT CHÍNH
         if st.button("🚀 BẮT ĐẦU XUẤT PROJECT ĐỀ THI (.ZIP)", type="primary", key="btn_export_project"):
             errors = []
             warnings = []
@@ -476,21 +488,8 @@ with tab3:
                     act = actual[dtype]
                     
                     if act < target:
-                        errors.append(f"❌ **Đề {de_idx} - Loại {dtype}:** Chỉ tiêu **{target}** câu nhưng bạn chỉ mới chọn **{act}** câu (Thiếu **{target - act}** câu).")
+                        errors.append(f"• **Đề {de_idx} ({dtype}):** Mục tiêu {target} câu, mới chọn {act} câu (Thiếu {target - act} câu).")
                     elif act > target:
-                        warnings.append(f"⚠️ **Đề {de_idx} - Loại {dtype}:** Chỉ tiêu **{target}** câu nhưng bạn đã chọn **{act}** câu (Dư **{act - target}** câu).")
+                        warnings.append(f"• **Đề {de_idx} ({dtype}):** Mục tiêu {target} câu, đã chọn {act} câu (Dư {act - target} câu).")
 
-            if errors or warnings:
-                with export_top_container:
-                    st.subheader("⚠️ CẢNH BÁO SỐ LƯỢNG CÂU HỎI")
-                    for err in errors:
-                        st.error(err)
-                    for warn in warnings:
-                        st.warning(warn)
-
-                    st.info("💡 Bạn có thể chọn thêm câu hỏi bên dưới hoặc bấm nút bên dưới để bỏ qua cảnh báo:")
-                    if st.button("⚠️ Bỏ qua cảnh báo & Vẫn tiếp tục xuất đề", key="btn_force_export"):
-                        run_export()
-                    st.divider()
-            else:
-                run_export()
+            process_export_dialog(errors, warnings)
