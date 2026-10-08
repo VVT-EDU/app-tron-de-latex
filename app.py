@@ -248,11 +248,11 @@ with tab3:
         # Gom cả 4 cấu hình số câu trên đúng 1 DÒNG DUY NHẤT
         c_atn, c_btf, c_cdk, c_khac = st.columns(4)
         with c_atn:
-            n_atn = st.number_input("Trắc nghiệm (ATN):", min_value=0, value=12, key="target_atn_common")
+            n_atn = st.number_input("Trắc nghiệm (ATN):", min_value=0, value=6, key="target_atn_common")
         with c_btf:
             m_btf = st.number_input("Đúng Sai (BTF):", min_value=0, value=4, key="target_btf_common")
         with c_cdk:
-            k_cdk = st.number_input("Trả lời ngắn (CDK):", min_value=0, value=6, key="target_cdk_common")
+            k_cdk = st.number_input("Trả lời ngắn (CDK):", min_value=0, value=4, key="target_cdk_common")
         with c_khac:
             h_khac = st.number_input("Số câu Khác:", min_value=0, value=0, key="target_khac_common")
 
