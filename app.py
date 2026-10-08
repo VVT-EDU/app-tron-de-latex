@@ -239,28 +239,32 @@ with tab3:
                         "ext": ext
                     })
 
-        # ----------------------------------------------------------------------
-        # 1. BẢNG NHẬP CHỈ TIÊU SỐ CÂU
+# ----------------------------------------------------------------------
+        # 1. BẢNG NHẬP CHỈ TIÊU SỐ CÂU (CHUNG CHO TẤT CẢ CÁC ĐỀ - GOM TRÊN 1 DÒNG)
         # ----------------------------------------------------------------------
         st.markdown("---")
         st.subheader("🎯 1. Cấu hình Chỉ tiêu số câu hỏi cho từng Đề")
         
-        target_counts = {de_idx: {} for de_idx in range(1, so_de + 1)}
-        cols_de = st.columns(min(so_de, 4))
-        for de_idx in range(1, so_de + 1):
-            with cols_de[(de_idx - 1) % 4]:
-                st.markdown(f"##### 📋 **Cấu hình Đề {de_idx}**")
-                n_atn = st.number_input(f"Số câu Trắc nghiệm (ATN):", min_value=0, value=12, key=f"target_atn_d{de_idx}")
-                m_btf = st.number_input(f"Số câu Đúng Sai (BTF):", min_value=0, value=4, key=f"target_btf_d{de_idx}")
-                k_cdk = st.number_input(f"Số câu Trả lời ngắn (CDK):", min_value=0, value=6, key=f"target_cdk_d{de_idx}")
-                h_khac = st.number_input(f"Số câu Khác:", min_value=0, value=0, key=f"target_khac_d{de_idx}")
-                
-                target_counts[de_idx] = {
-                    "ATN": n_atn,
-                    "BTF": m_btf,
-                    "CDK": k_cdk,
-                    "Khác": h_khac
-                }
+        # Gom cả 4 cấu hình số câu trên đúng 1 DÒNG DUY NHẤT
+        c_atn, c_btf, c_cdk, c_khac = st.columns(4)
+        with c_atn:
+            n_atn = st.number_input("Trắc nghiệm (ATN):", min_value=0, value=12, key="target_atn_common")
+        with c_btf:
+            m_btf = st.number_input("Đúng Sai (BTF):", min_value=0, value=4, key="target_btf_common")
+        with c_cdk:
+            k_cdk = st.number_input("Trả lời ngắn (CDK):", min_value=0, value=6, key="target_cdk_common")
+        with c_khac:
+            h_khac = st.number_input("Số câu Khác:", min_value=0, value=0, key="target_khac_common")
+
+        # Áp dụng cấu hình chung này cho tất cả các đề (Đề 1, Đề 2,...)
+        target_counts = {
+            de_idx: {
+                "ATN": n_atn,
+                "BTF": m_btf,
+                "CDK": k_cdk,
+                "Khác": h_khac
+            } for de_idx in range(1, so_de + 1)
+        }
 
         # ----------------------------------------------------------------------
         # 2. BẢNG CHỌN CÂU HỎI
