@@ -101,33 +101,6 @@ def add_folder_to_zip(zip_file, folder_name, dest_prefix):
                 rel_path = os.path.relpath(full_path, full_folder_path)
                 zip_file.write(full_path, arcname=f"{dest_prefix}/{rel_path}")
 
-def compile_tex_to_pdf(tex_content, work_dir=None):
-    """Hàm biên dịch mã LaTeX trực tiếp thành file PDF bytes qua pdflatex"""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        if work_dir and os.path.exists(work_dir):
-            import shutil
-            shutil.copytree(work_dir, tmpdir, dirs_exist_ok=True)
-
-        tex_path = os.path.join(tmpdir, "document.tex")
-        with open(tex_path, "w", encoding="utf-8") as f:
-            f.write(tex_content)
-
-        for _ in range(2):
-            cmd = ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "document.tex"]
-            result = subprocess.run(cmd, cwd=tmpdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-        pdf_path = os.path.join(tmpdir, "document.pdf")
-        if os.path.exists(pdf_path):
-            with open(pdf_path, "rb") as f:
-                return f.read(), None
-        else:
-            log_path = os.path.join(tmpdir, "document.log")
-            log_content = ""
-            if os.path.exists(log_path):
-                with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-                    log_content = f.read()
-            return None, log_content if log_content else result.stdout
-
 # ==============================================================================
 # 4. GIAO DIỆN CHÍNH (3 TABS)
 # ==============================================================================
@@ -192,9 +165,6 @@ with tab2:
 with tab3:
     st.title("📝 HỆ THỐNG TẠO ĐỀ THI TỰ ĐỘNG")
     st.write("Hệ thống kết nối trực tiếp với thư mục `topics` trên Server hoặc tiếp nhận file ZIP nén bộ bài tập.")
-
-    # KHỐI CONTAINER TẢI ĐỀ HIỂN THỊ TRÊN ĐẦU
-    export_top_container = st.container()
 
     col1, col2 = st.columns([1, 1])
     with col1:
@@ -458,38 +428,48 @@ with tab3:
                     execute_export()
                 st.rerun()
 
-        # HIỂN THỊ NÚT TẢI VỀ NẾU ĐÃ TẠO XONG
+        # ----------------------------------------------------------------------
+        # 3. KHU VỰC NÚT XUẤT ĐỀ & TẢI FILE NẰM SÁT NHAU Ở CÙNG MỘT HÀNG
+        # ----------------------------------------------------------------------
+        st.markdown("---")
+        
+        # Nếu đã xuất đề xong, hiển thị thông báo thành công
         if st.session_state.get('export_completed', False):
-            with export_top_container:
-                st.success("🎉 Đã khởi tạo thành công Project Đề thi!")
+            st.success("🎉 Đã khởi tạo thành công Project Đề thi!")[cite: 7]
+
+        # Chia thành 2 cột nằm song song sát nhau
+        col_btn1, col_btn2 = st.columns([1, 1])
+
+        with col_btn1:
+            btn_start = st.button("🚀 BẮT ĐẦU XUẤT PROJECT ĐỀ THI (.ZIP)", type="primary", key="btn_export_project", use_container_width=True)[cite: 8]
+            if btn_start:
+                errors = []
+                warnings = []
+
+                for de_idx in range(1, so_de + 1):
+                    actual = {"ATN": 0, "BTF": 0, "CDK": 0, "Khác": 0}
+                    for item in q_data_list:
+                        c = selected_counts[de_idx].get(item['path'], 0)
+                        actual[item['type']] += c
+
+                    for dtype in ["ATN", "BTF", "CDK", "Khác"]:
+                        target = target_counts[de_idx][dtype]
+                        act = actual[dtype]
+                        
+                        if act < target:
+                            errors.append(f"• **Đề {de_idx} ({dtype}):** Mục tiêu {target} câu, mới chọn {act} câu (Thiếu {target - act} câu).")
+                        elif act > target:
+                            warnings.append(f"• **Đề {de_idx} ({dtype}):** Mục tiêu {target} câu, đã chọn {act} câu (Dư {act - target} câu).")
+
+                process_export_dialog(errors, warnings)
+
+        with col_btn2:
+            if st.session_state.get('export_completed', False):
                 st.download_button(
-                    label="📦 Tải về bộ Project Đề Thi (.ZIP)", 
+                    label="📦 TẢI VỀ BỘ PROJECT ĐỀ THI (.ZIP)",[cite: 7]
                     data=st.session_state.get('zip_bytes', b''), 
                     file_name=st.session_state.get('zip_filename', 'Project_DeThi.zip'), 
                     mime="application/zip",
                     type="primary",
                     use_container_width=True
                 )
-                st.divider()
-
-        # NÚT KÍCH HOẠT CHÍNH
-        if st.button("🚀 BẮT ĐẦU XUẤT PROJECT ĐỀ THI (.ZIP)", type="primary", key="btn_export_project"):
-            errors = []
-            warnings = []
-
-            for de_idx in range(1, so_de + 1):
-                actual = {"ATN": 0, "BTF": 0, "CDK": 0, "Khác": 0}
-                for item in q_data_list:
-                    c = selected_counts[de_idx].get(item['path'], 0)
-                    actual[item['type']] += c
-
-                for dtype in ["ATN", "BTF", "CDK", "Khác"]:
-                    target = target_counts[de_idx][dtype]
-                    act = actual[dtype]
-                    
-                    if act < target:
-                        errors.append(f"• **Đề {de_idx} ({dtype}):** Mục tiêu {target} câu, mới chọn {act} câu (Thiếu {target - act} câu).")
-                    elif act > target:
-                        warnings.append(f"• **Đề {de_idx} ({dtype}):** Mục tiêu {target} câu, đã chọn {act} câu (Dư {act - target} câu).")
-
-            process_export_dialog(errors, warnings)
